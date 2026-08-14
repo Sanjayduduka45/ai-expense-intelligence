@@ -1,0 +1,3 @@
+# data/sample — sample expense files for development and testing
+# Real personal financial data must NEVER be committed here.
+# Add actual .csv / .xlsx files locally; they are git-ignored.
