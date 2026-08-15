@@ -1,6 +1,7 @@
 # Core runtime
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
+python-multipart==0.0.32
 streamlit==1.41.1
 
 # Data processing
@@ -10,14 +11,14 @@ numpy==2.1.3
 # Visualisation
 plotly==5.24.1
 
-# AI  (Gemini SDK — not wired up in Phase 0)
+# AI (Google Gemini SDK)
 google-generativeai==0.8.3
 
 # Validation & settings
 pydantic==2.10.3
 pydantic-settings==2.6.1
 
-# HTTP client (Streamlit → FastAPI)
+# HTTP client (Streamlit → FastAPI & async test client)
 httpx==0.28.1
 
 # Environment
@@ -25,4 +26,3 @@ python-dotenv==1.0.1
 
 # Testing
 pytest==8.3.4
-httpx==0.28.1   # reused for AsyncClient in tests

@@ -1,8 +1,8 @@
 """
 FastAPI application factory and entry point.
 
-Phase 0: bare application with a single /health endpoint.
-No business logic is wired here yet.
+Phase 1: Clean API foundation with structured routing, versioning, centralized
+exception handling, configurable CORS, and Pydantic configuration.
 """
 
 from __future__ import annotations
@@ -10,42 +10,45 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.backend.api.health import router as health_router
-from app.backend.core.config import settings
-from app.shared.constants import APP_NAME, APP_TAGLINE, APP_VERSION
+from app.backend.api.router import api_router
+from app.backend.core.config import Settings, get_settings
+from app.backend.core.handlers import register_exception_handlers
+from app.backend.core.logging import setup_logging
 
 
-def create_app() -> FastAPI:
+def create_app(settings: Settings | None = None) -> FastAPI:
     """Construct and configure the FastAPI application."""
+    app_settings = settings or get_settings()
+
+    # Configure structured logging
+    setup_logging(app_settings.log_level)
 
     app = FastAPI(
-        title=APP_NAME,
-        description=APP_TAGLINE,
-        version=APP_VERSION,
-        docs_url="/docs" if settings.is_development else None,
-        redoc_url="/redoc" if settings.is_development else None,
+        title=app_settings.app_name,
+        description=app_settings.app_tagline,
+        version=app_settings.app_version,
+        docs_url="/docs" if app_settings.is_development else None,
+        redoc_url="/redoc" if app_settings.is_development else None,
     )
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    # Restrict to the Streamlit dev origin; tighten for production.
-    origins = [
-        f"http://{settings.backend_host}:{settings.backend_port}",
-        "http://localhost:8501",
-        "http://127.0.0.1:8501",
-    ]
+    # Restrictive and configurable via environment variables / settings
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
+        allow_origins=app_settings.cors_origins,
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "Accept"],
     )
 
+    # ── Centralized Exception Handlers ────────────────────────────────────────
+    register_exception_handlers(app)
+
     # ── Routers ───────────────────────────────────────────────────────────────
-    app.include_router(health_router)
+    app.include_router(api_router)
 
     return app
 
 
-# Module-level app instance consumed by uvicorn.
+# Module-level app instance consumed by uvicorn
 app: FastAPI = create_app()
