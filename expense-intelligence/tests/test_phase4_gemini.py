@@ -177,6 +177,38 @@ class TestGeminiServiceLogic:
 
     @patch("google.generativeai.GenerativeModel")
     @patch("google.generativeai.configure")
+    def test_timeout_handling(
+        self,
+        mock_configure: MagicMock,
+        mock_model_cls: MagicMock,
+        sample_analytics_report: ExpenseAnalyticsReport,
+    ) -> None:
+        mock_instance = MagicMock()
+        mock_instance.generate_content.side_effect = Exception("DeadlineExceeded: 504 Gateway Timeout")
+        mock_model_cls.return_value = mock_instance
+
+        service = GeminiExpenseService(settings=Settings(gemini_api_key="valid_key"))
+        with pytest.raises(ServiceUnavailableError, match="timed out"):
+            service.generate_insights(sample_analytics_report)
+
+    @patch("google.generativeai.GenerativeModel")
+    @patch("google.generativeai.configure")
+    def test_provider_unexpected_failure_handling(
+        self,
+        mock_configure: MagicMock,
+        mock_model_cls: MagicMock,
+        sample_analytics_report: ExpenseAnalyticsReport,
+    ) -> None:
+        mock_instance = MagicMock()
+        mock_instance.generate_content.side_effect = Exception("InternalServerError: 500 Backend error")
+        mock_model_cls.return_value = mock_instance
+
+        service = GeminiExpenseService(settings=Settings(gemini_api_key="valid_key"))
+        with pytest.raises(ServiceUnavailableError, match="unexpected error"):
+            service.generate_insights(sample_analytics_report)
+
+    @patch("google.generativeai.GenerativeModel")
+    @patch("google.generativeai.configure")
     def test_prompt_injection_defense_in_prompt(
         self,
         mock_configure: MagicMock,
@@ -273,3 +305,48 @@ class TestAiEndpoint:
             assert "Gemini API key is not configured" in data["error"]["message"]
         finally:
             app.dependency_overrides.pop(get_settings, None)
+
+    @pytest.mark.anyio
+    async def test_health_remains_responsive_during_gemini_request(self) -> None:
+        """Verify that a slow Gemini request offloaded to a thread does not block /api/v1/health."""
+        import asyncio
+        import time
+        from httpx import ASGITransport, AsyncClient
+
+        def slow_gemini_call(*args: Any, **kwargs: Any) -> str:
+            time.sleep(0.4)  # Simulate blocking 400ms external SDK call
+            return "Answer after delay"
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            with patch(
+                "app.backend.services.gemini_service.GeminiExpenseService.answer_query",
+                side_effect=slow_gemini_call,
+            ):
+                # Start slow AI request concurrently
+                ai_task = asyncio.create_task(
+                    ac.post(
+                        "/api/v1/ai/ask",
+                        json={
+                            "query": "Where did I spend most?",
+                            "expenses": [
+                                {"date": "2025-01-01", "description": "Coffee", "category": "Food & Dining", "amount": 4.50}
+                            ],
+                        },
+                    )
+                )
+
+                # Ensure AI task has started
+                await asyncio.sleep(0.05)
+                health_start = time.time()
+                health_res = await ac.get("/api/v1/health")
+                health_duration = time.time() - health_start
+
+                # Health check must respond immediately without being blocked
+                assert health_res.status_code == 200
+                assert health_res.json()["status"] == "ok"
+                assert health_duration < 0.25
+
+                ai_res = await ai_task
+                assert ai_res.status_code == 200
+                assert ai_res.json()["answer"] == "Answer after delay"

@@ -1,8 +1,14 @@
 """
 AI generation API routes for v1.
+
+Uses asyncio.to_thread to run synchronous Gemini SDK calls in a worker threadpool,
+ensuring the main FastAPI asyncio event loop never blocks and /api/v1/health remains
+fully responsive during AI operations.
 """
 
 from __future__ import annotations
+
+import asyncio
 
 from fastapi import APIRouter, Depends
 
@@ -50,11 +56,12 @@ async def generate_roast_and_recovery(
 
     1. Computes deterministic analytics summary.
     2. Packages compact analytical data safely inside prompt-injection defense tags.
-    3. Requests structured JSON from Gemini.
+    3. Requests structured JSON from Gemini via non-blocking worker thread.
     4. Validates output with Pydantic.
     """
     analytics_report = analytics.analyze(request.expenses)
-    return gemini.generate_insights(analytics_report)
+    # Offload blocking Gemini SDK network call to worker thread
+    return await asyncio.to_thread(gemini.generate_insights, analytics_report)
 
 
 @router.post(
@@ -70,9 +77,12 @@ async def ask_assistant(
 ) -> AiAssistantQueryResponse:
     """
     Answer user query grounded strictly in the analyzed financial metrics.
+    Offloads blocking Gemini SDK call to a worker thread so the event loop is never blocked.
     """
     analytics_report = analytics.analyze(request.expenses)
-    answer = gemini.answer_query(
+    # Offload blocking Gemini SDK network call to worker thread
+    answer = await asyncio.to_thread(
+        gemini.answer_query,
         query=request.query,
         report=analytics_report,
         history=request.history,

@@ -1,5 +1,7 @@
 """
 KPI metric card components for the AI Expense Intelligence dashboard.
+
+Styled with modern light financial card styling, soft pastel accents, and INR currency formatting.
 """
 
 from __future__ import annotations
@@ -8,13 +10,17 @@ from typing import Any
 
 import streamlit as st
 
+from app.frontend.utils.currency import format_inr
+
 
 def render_kpi_cards(factual: dict[str, Any], heuristics: dict[str, Any]) -> None:
     """
-    Render 5 clean, consistent KPI metric cards based strictly on backend calculations.
+    Render 5 horizontally aligned modern light KPI cards based strictly on backend calculations.
     """
     total_spending = factual.get("total_spending", 0.0)
     avg_txn = factual.get("average_transaction", 0.0)
+    txn_count = factual.get("transaction_count", 0)
+    median_txn = factual.get("median_transaction", 0.0)
     spending_by_cat = factual.get("spending_by_category", {})
     cat_pcts = factual.get("category_percentages", {})
 
@@ -39,50 +45,84 @@ def render_kpi_cards(factual: dict[str, Any], heuristics: dict[str, Any]) -> Non
         s.get("potential_monthly_impact") or 0.0 for s in savings_list
     )
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    kpi_cards_data = [
+        {
+            "label": "Total Spending",
+            "value": format_inr(total_spending),
+            "subtext": f"{txn_count} transactions",
+            "icon": "💳",
+            "accent_bg": "#EEF2FF",
+            "accent_border": "#C7D2FE",
+            "accent_color": "#4F46E5",
+        },
+        {
+            "label": "Avg. Transaction",
+            "value": format_inr(avg_txn),
+            "subtext": f"Median {format_inr(median_txn)}",
+            "icon": "📊",
+            "accent_bg": "#F0F9FF",
+            "accent_border": "#BAE6FD",
+            "accent_color": "#0284C7",
+        },
+        {
+            "label": "Top Category",
+            "value": top_cat_name,
+            "subtext": f"{top_cat_pct:.1f}% ({format_inr(top_cat_amount)})",
+            "icon": "🏷️",
+            "accent_bg": "#FEF3C7",
+            "accent_border": "#FDE68A",
+            "accent_color": "#D97706",
+        },
+        {
+            "label": "Discretionary Spend",
+            "value": format_inr(disc_amount),
+            "subtext": f"{disc_pct:.1f}% of total outflow",
+            "icon": "🛍️",
+            "accent_bg": "#FDF2F8",
+            "accent_border": "#FBCFE8",
+            "accent_color": "#DB2777",
+        },
+        {
+            "label": "Potential Savings",
+            "value": format_inr(total_potential_savings),
+            "subtext": f"{len(savings_list)} opportunities flagged",
+            "icon": "💡",
+            "accent_bg": "#ECFDF5",
+            "accent_border": "#A7F3D0",
+            "accent_color": "#059669",
+        },
+    ]
 
-    with col1:
-        st.metric(
-            label="Total Spending",
-            value=f"${total_spending:,.2f}",
-            help="Total sum of all valid transactions parsed.",
-        )
-        st.caption(f"{factual.get('transaction_count', 0)} transactions")
-
-    with col2:
-        st.metric(
-            label="Avg. Transaction",
-            value=f"${avg_txn:,.2f}",
-            help="Mean expenditure per transaction.",
-        )
-        st.caption(f"Median: ${factual.get('median_transaction', 0.0):,.2f}")
-
-    with col3:
-        st.metric(
-            label="Top Category",
-            value=top_cat_name,
-            delta=f"{top_cat_pct:.1f}% share",
-            delta_color="off",
-            help="Category with the highest aggregate expenditure.",
-        )
-        st.caption(f"${top_cat_amount:,.2f}")
-
-    with col4:
-        st.metric(
-            label="Discretionary Spend",
-            value=f"${disc_amount:,.2f}",
-            delta=f"{disc_pct:.1f}% of total",
-            delta_color="inverse",
-            help="Estimated non-essential expenditure (dining, shopping, leisure).",
-        )
-        st.caption("Rule-based classification")
-
-    with col5:
-        st.metric(
-            label="Potential Savings",
-            value=f"${total_potential_savings:,.2f}",
-            delta=f"{len(savings_list)} opportunities" if savings_list else "0 opportunities",
-            delta_color="normal",
-            help="Calculated potential savings across recurring and discretionary items.",
-        )
-        st.caption("Identified targets")
+    cols = st.columns(5)
+    for idx, card in enumerate(kpi_cards_data):
+        with cols[idx]:
+            card_html = f"""
+            <div style="
+                background-color: #FFFFFF;
+                border: 1px solid #E2E8F0;
+                border-top: 3px solid {card['accent_color']};
+                border-radius: 12px;
+                padding: 16px 14px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            ">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #64748B;">
+                        {card['label']}
+                    </span>
+                    <span style="font-size: 1rem; background-color: {card['accent_bg']}; padding: 4px 6px; border-radius: 6px;">
+                        {card['icon']}
+                    </span>
+                </div>
+                <div style="font-size: 1.35rem; font-weight: 700; color: #0F172A; margin-bottom: 4px; word-break: break-word;">
+                    {card['value']}
+                </div>
+                <div style="font-size: 0.75rem; color: #64748B; font-weight: 500;">
+                    {card['subtext']}
+                </div>
+            </div>
+            """
+            st.markdown(card_html, unsafe_allow_html=True)

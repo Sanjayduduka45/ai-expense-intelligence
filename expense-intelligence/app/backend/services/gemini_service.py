@@ -232,12 +232,13 @@ class GeminiExpenseService:
             genai.configure(api_key=api_key)
             generation_config = {"response_mime_type": "application/json"} if json_mode else {}
             model = genai.GenerativeModel(
-                model_name="gemini-1.5-flash",
+                model_name="gemini-3.5-flash",
                 system_instruction=system_instruction,
                 generation_config=generation_config,
             )
 
-            response = model.generate_content(prompt)
+            # Request timeout of 30s to prevent indefinite hanging
+            response = model.generate_content(prompt, request_options={"timeout": 30.0})
             if not response or not response.text:
                 raise ServiceUnavailableError("Gemini AI returned an empty response.")
 
